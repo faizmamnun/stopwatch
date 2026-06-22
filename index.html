@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stopwatch</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0d0d0d;
+      color: #f0f0f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    h1 {
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #555;
+      margin-bottom: 40px;
+    }
+
+    .timer-display {
+      font-size: clamp(48px, 15vw, 96px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #f0f0f0;
+      line-height: 1;
+      margin-bottom: 8px;
+      tabular-nums: tabular;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .next-lap-info {
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      color: #444;
+      margin-bottom: 40px;
+      height: 16px;
+    }
+
+    .next-lap-info span {
+      color: #888;
+    }
+
+    .progress-ring-container {
+      position: relative;
+      width: 60px;
+      height: 60px;
+      margin: 0 auto 32px;
+    }
+
+    .progress-ring {
+      transform: rotate(-90deg);
+    }
+
+    .progress-ring-bg {
+      stroke: #222;
+      fill: none;
+    }
+
+    .progress-ring-fill {
+      stroke: #e8ff47;
+      fill: none;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.05s linear;
+    }
+
+    .controls {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    button {
+      padding: 12px 28px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      border: 1px solid #333;
+      background: transparent;
+      color: #f0f0f0;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: all 0.15s;
+    }
+
+    button:hover { background: #1a1a1a; border-color: #555; }
+
+    #startBtn {
+      background: #e8ff47;
+      color: #0d0d0d;
+      border-color: #e8ff47;
+      font-weight: 700;
+    }
+
+    #startBtn:hover { background: #d4eb30; border-color: #d4eb30; }
+    #startBtn.running { background: transparent; color: #e8ff47; border-color: #e8ff47; }
+    #startBtn.running:hover { background: #e8ff4710; }
+
+    #resetBtn { color: #555; }
+
+    .laps-section {
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .laps-header {
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      color: #333;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #1a1a1a;
+      margin-bottom: 8px;
+    }
+
+    .laps-list {
+      max-height: 220px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #222 transparent;
+    }
+
+    .lap-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #111;
+      font-size: 13px;
+      animation: lapIn 0.2s ease;
+    }
+
+    @keyframes lapIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .lap-num { color: #444; font-size: 10px; letter-spacing: 0.2em; width: 40px; }
+    .lap-split { color: #888; width: 80px; text-align: center; }
+    .lap-total { color: #f0f0f0; width: 80px; text-align: right; }
+
+    .lap-item.fastest .lap-split { color: #e8ff47; }
+    .lap-item.slowest .lap-split { color: #ff5f5f; }
+
+    .lap-badge {
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      padding: 1px 5px;
+      border-radius: 2px;
+      width: 52px;
+      text-align: center;
+    }
+    .lap-badge.type-10  { background: #1a2800; color: #8bc34a; }
+    .lap-badge.type-30  { background: #1c1000; color: #ffa726; }
+    .lap-badge.type-man { background: #0d1a2e; color: #64b5f6; }
+
+    .empty-laps {
+      color: #2a2a2a;
+      font-size: 12px;
+      text-align: center;
+      padding: 24px 0;
+      letter-spacing: 0.1em;
+    }
+
+    /* Countdown overlay */
+    #countdown-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #countdown-number {
+      font-family: 'Courier New', monospace;
+      font-size: 180px;
+      font-weight: 700;
+      color: #e8ff47;
+      opacity: 0;
+      transform: scale(1.4);
+      transition: none;
+      text-shadow: 0 0 60px #e8ff4788;
+      letter-spacing: -0.05em;
+    }
+
+    #countdown-number.show {
+      animation: countPop 0.85s ease forwards;
+    }
+
+    @keyframes countPop {
+      0%   { opacity: 0; transform: scale(1.5); }
+      15%  { opacity: 1; transform: scale(1);   }
+      70%  { opacity: 1; transform: scale(1);   }
+      100% { opacity: 0; transform: scale(0.7); }
+    }
+
+    /* Flash on lap */
+    #flash {
+      position: fixed;
+      inset: 0;
+      background: #e8ff47;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 99;
+    }
+
+    #flash.pop {
+      animation: flashPop 0.35s ease forwards;
+    }
+
+    @keyframes flashPop {
+      0%   { opacity: 0.18; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Countdown overlay -->
+<div id="countdown-overlay">
+  <div id="countdown-number"></div>
+</div>
+<div id="flash"></div>
+
+<h1>Stopwatch</h1>
+
+<div class="timer-display" id="display">00:00.000</div>
+<div class="next-lap-info" id="nextInfo"></div>
+
+<div class="progress-ring-container">
+  <svg class="progress-ring" width="60" height="60">
+    <circle class="progress-ring-bg" cx="30" cy="30" r="26" stroke-width="3"/>
+    <circle class="progress-ring-fill" cx="30" cy="30" r="26" stroke-width="3"
+      id="ringFill"
+      stroke-dasharray="163.36"
+      stroke-dashoffset="163.36"/>
+  </svg>
+</div>
+
+<div class="controls">
+  <button id="startBtn" onclick="toggleStart()">Start</button>
+  <button id="lapBtn" onclick="manualLap()" disabled>Lap</button>
+  <button id="resetBtn" onclick="resetAll()">Reset</button>
+</div>
+
+<div class="laps-section">
+  <div class="laps-header">
+    <span>Lap</span>
+    <span>Type</span>
+    <span>Split</span>
+    <span>Total</span>
+  </div>
+  <div class="laps-list" id="lapsList">
+    <div class="empty-laps" id="emptyMsg">No laps yet</div>
+  </div>
+</div>
+
+<script>
+  // --- Audio ---
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let audioCtx = null;
+
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    return audioCtx;
+  }
+
+  function playBeep(freq = 880, duration = 0.12, gain = 0.4, type = 'sine') {
+    try {
+      const ctx = getAudioCtx();
+      const osc = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      osc.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gainNode.gain.setValueAtTime(gain, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + duration);
+    } catch(e) {}
+  }
+
+  function playCountdownTick() {
+    // Short soft click for 3, 2, 1
+    playBeep(660, 0.08, 0.25, 'sine');
+  }
+
+  function playLapBeep() {
+    // Two-tone sharp beep on lap
+    playBeep(1046, 0.08, 0.5, 'square');
+    setTimeout(() => playBeep(1318, 0.15, 0.45, 'square'), 90);
+  }
+
+  // --- State ---
+  let startTime = 0;
+  let elapsed = 0;
+  let running = false;
+  let raf = null;
+  let lastLapTime = 0;
+  let lapCount = 0;
+  let laps = [];
+
+  const schedule = [10000, 30000];
+  let scheduleIdx = 0;
+  let nextLapAt = schedule[0];
+
+  // Countdown state
+  let countdownShown = { 3: false, 2: false, 1: false };
+
+  // --- Formatting ---
+  function fmt(ms) {
+    const m   = Math.floor(ms / 60000);
+    const s   = Math.floor((ms % 60000) / 1000);
+    const ms3 = Math.floor(ms % 1000);
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(ms3).padStart(3,'0')}`;
+  }
+
+  function fmtShort(ms) {
+    const s   = Math.floor((ms % 60000) / 1000);
+    const ms3 = Math.floor(ms % 1000);
+    const m   = Math.floor(ms / 60000);
+    if (m > 0) return `${m}:${String(s).padStart(2,'0')}.${String(ms3).padStart(3,'0')}`;
+    return `${s}.${String(ms3).padStart(3,'0')}`;
+  }
+
+  // --- Countdown display ---
+  function showCountdownNumber(n) {
+    const el = document.getElementById('countdown-number');
+    el.textContent = n;
+    el.classList.remove('show');
+    void el.offsetWidth; // reflow to restart animation
+    el.classList.add('show');
+    playCountdownTick();
+  }
+
+  function triggerFlash() {
+    const el = document.getElementById('flash');
+    el.classList.remove('pop');
+    void el.offsetWidth;
+    el.classList.add('pop');
+  }
+
+  // --- Main loop ---
+  function tick() {
+    if (!running) return;
+    elapsed = Date.now() - startTime;
+
+    document.getElementById('display').textContent = fmt(elapsed);
+    updateRing();
+    updateNextInfo();
+    checkCountdown();
+
+    if (elapsed >= nextLapAt) {
+      recordLap('auto');
+    }
+
+    raf = requestAnimationFrame(tick);
+  }
+
+  function checkCountdown() {
+    const remaining = nextLapAt - elapsed;
+    // Show 3, 2, 1 at the right moments (within a 100ms window to avoid missing)
+    if (remaining <= 3000 && remaining > 2000 && !countdownShown[3]) {
+      countdownShown[3] = true;
+      showCountdownNumber(3);
+    } else if (remaining <= 2000 && remaining > 1000 && !countdownShown[2]) {
+      countdownShown[2] = true;
+      showCountdownNumber(2);
+    } else if (remaining <= 1000 && remaining > 0 && !countdownShown[1]) {
+      countdownShown[1] = true;
+      showCountdownNumber(1);
+    }
+  }
+
+  function resetCountdown() {
+    countdownShown = { 3: false, 2: false, 1: false };
+  }
+
+  // --- Ring progress ---
+  function updateRing() {
+    const circumference = 163.36;
+    const lapStart = lastLapTime;
+    const lapEnd   = nextLapAt;
+    const progress = Math.min((elapsed - lapStart) / (lapEnd - lapStart), 1);
+    const offset   = circumference * (1 - progress);
+    document.getElementById('ringFill').style.strokeDashoffset = offset;
+  }
+
+  function updateNextInfo() {
+    const remaining = Math.max(nextLapAt - elapsed, 0);
+    const intervalLabel = schedule[scheduleIdx] === 10000 ? '10s' : '30s';
+    document.getElementById('nextInfo').innerHTML =
+      `Next auto-lap <span>(${intervalLabel})</span> in <span>${fmtShort(remaining)}</span>`;
+  }
+
+  // --- Lap recording ---
+  function recordLap(type) {
+    lapCount++;
+    const split = elapsed - lastLapTime;
+    laps.push({ num: lapCount, split, total: elapsed, type });
+    lastLapTime = elapsed;
+
+    scheduleIdx = (scheduleIdx + 1) % schedule.length;
+    nextLapAt = elapsed + schedule[scheduleIdx];
+
+    resetCountdown();
+    triggerFlash();
+    playLapBeep();
+    renderLaps();
+  }
+
+  function manualLap() {
+    if (!running) return;
+    recordLap('manual');
+  }
+
+  // --- Render laps ---
+  function renderLaps() {
+    const list = document.getElementById('lapsList');
+    document.getElementById('emptyMsg')?.remove();
+
+    const splits = laps.map(l => l.split);
+    const minSplit = Math.min(...splits);
+    const maxSplit = Math.max(...splits);
+
+    list.innerHTML = '';
+    [...laps].reverse().forEach(lap => {
+      const div = document.createElement('div');
+      div.className = 'lap-item';
+      if (splits.length > 1 && lap.split === minSplit) div.classList.add('fastest');
+      else if (splits.length > 1 && lap.split === maxSplit) div.classList.add('slowest');
+
+      const typeLabel = lap.type === 'manual' ? 'Manual'
+                      : lap.split <= 10100 ? '10s Auto' : '30s Auto';
+      const typeClass = lap.type === 'manual' ? 'type-man'
+                      : lap.split <= 10100 ? 'type-10' : 'type-30';
+
+      div.innerHTML = `
+        <span class="lap-num">L${String(lap.num).padStart(2,'0')}</span>
+        <span class="lap-badge ${typeClass}">${typeLabel}</span>
+        <span class="lap-split">${fmt(lap.split)}</span>
+        <span class="lap-total">${fmt(lap.total)}</span>`;
+      list.appendChild(div);
+    });
+  }
+
+  // --- Controls ---
+  function toggleStart() {
+    // Unlock audio context on first user gesture
+    getAudioCtx();
+
+    if (!running) {
+      if (elapsed === 0) {
+        startTime = Date.now();
+        lastLapTime = 0;
+        nextLapAt = schedule[0];
+        scheduleIdx = 0;
+        resetCountdown();
+      } else {
+        startTime = Date.now() - elapsed;
+        nextLapAt = lastLapTime + schedule[scheduleIdx];
+      }
+      running = true;
+      document.getElementById('startBtn').textContent = 'Pause';
+      document.getElementById('startBtn').classList.add('running');
+      document.getElementById('lapBtn').disabled = false;
+      raf = requestAnimationFrame(tick);
+    } else {
+      running = false;
+      cancelAnimationFrame(raf);
+      document.getElementById('startBtn').textContent = 'Resume';
+      document.getElementById('startBtn').classList.remove('running');
+      document.getElementById('nextInfo').textContent = '';
+      document.getElementById('ringFill').style.strokeDashoffset = '163.36';
+    }
+  }
+
+  function resetAll() {
+    running = false;
+    cancelAnimationFrame(raf);
+    elapsed = 0;
+    lastLapTime = 0;
+    lapCount = 0;
+    laps = [];
+    scheduleIdx = 0;
+    nextLapAt = schedule[0];
+    resetCountdown();
+
+    document.getElementById('display').textContent = '00:00.000';
+    document.getElementById('nextInfo').textContent = '';
+    document.getElementById('ringFill').style.strokeDashoffset = '163.36';
+    document.getElementById('startBtn').textContent = 'Start';
+    document.getElementById('startBtn').classList.remove('running');
+    document.getElementById('lapBtn').disabled = true;
+    document.getElementById('lapsList').innerHTML =
+      '<div class="empty-laps" id="emptyMsg">No laps yet</div>';
+  }
+</script>
+</body>
+</html>
